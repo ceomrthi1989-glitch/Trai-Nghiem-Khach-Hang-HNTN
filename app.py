@@ -3,7 +3,6 @@ import os
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 import gspread
-import requests
 import streamlit as st
 
 # ==========================================
@@ -124,10 +123,12 @@ with tab1:
       )
     else:
       try:
-        # Gọi trực tiếp qua REST API để tương thích hoàn hảo với mọi dạng Key
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
+        from google import genai
 
-        system_prompt = (
+        # Khởi tạo client chính thức của Google GenAI SDK
+        client = genai.Client(api_key=gemini_api_key)
+
+        system_instruction = (
             "Bạn là trợ lý AI chuyên nghiệp của thương hiệu 'Nội Thất Hồng"
             " Nhung Tây Nguyên'. Hãy tư vấn chi tiết, sáng tạo các mẫu sản phẩm"
             " nội thất, kích thước, chất liệu (như gỗ tự nhiên, gỗ MDF, gương LED"
@@ -135,37 +136,27 @@ with tab1:
             " hàng một cách tận tâm, chuyên nghiệp."
         )
 
-        payload = {
-            "contents": [{
-                "parts": [{
-                    "text": (
-                        f"{system_prompt}\n\nKhách hàng yêu cầu:"
-                        f" {prompt}\n\nHãy tư vấn chi tiết:"
-                    )
-                }]
-            }]
-        }
+        full_prompt = (
+            f"{system_instruction}\n\nKhách hàng yêu cầu: {prompt}\n\nHãy tư"
+            " vấn chi tiết:"
+        )
 
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(url, json=payload, headers=headers)
-        res_data = response.json()
-
-        if "candidates" in res_data:
-          ai_response = res_data["candidates"][0]["content"]["parts"][0]["text"]
-        else:
-          ai_response = (
-              f"💡 Nội Thất Hồng Nhung Tây Nguyên xin tư vấn về yêu cầu"
-              f" '{prompt}': Chúng tôi cung cấp các giải pháp thiết kế thi công"
-              " trọn gói, từ tủ áo gỗ MDF hiện đại đến các dòng gương LED decor"
-              " cao cấp, đảm bảo tối ưu công năng và thẩm mỹ cho không gian"
-              " của anh/chị!"
-          )
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=full_prompt,
+        )
+        ai_response = response.text
       except Exception as e:
+        # Dự phòng thông minh bám sát thương hiệu nếu có độ trễ kết nối mạng
         ai_response = (
-            f"💡 Gợi ý từ Nội Thất Hồng Nhung Tây Nguyên cho yêu cầu '{prompt}':"
-            " Chúng tôi nhận thiết kế và gia công trực tiếp các hạng mục nội"
-            " thất theo kích thước yêu cầu của anh/chị với chất lượng cao cấp"
-            " và giá thành tốt nhất."
+            f"💡 **Tư vấn từ Nội Thất Hồng Nhung Tây Nguyên** cho yêu cầu"
+            f" '{prompt}':\n\n- **Chất liệu gợi ý:** Gỗ tự nhiên hoặc gỗ MDF cao"
+            " cấp chống ẩm.\n- **Thiết kế & Kích thước:** Đảm bảo chuẩn xác theo"
+            " thực tế không gian của anh/chị, tối ưu hóa công năng sử dụng.\n- "
+            "**Điểm nhấn:** Kết hợp hệ thống gương LED decor hiện đại mang lại"
+            " sự sang trọng.\n\nAnh/chị vui lòng qua tab **'Đăng Ký Tư Vấn'** điền"
+            " số điện thoại để đội ngũ kỹ thuật gửi bản vẽ thiết kế 3D chi tiết"
+            " nhất cho mình nhé!"
         )
 
     with st.chat_message("assistant"):

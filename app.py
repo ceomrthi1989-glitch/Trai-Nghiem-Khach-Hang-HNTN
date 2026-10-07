@@ -1,7 +1,9 @@
+import json
 import os
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 import gspread
+import requests
 import streamlit as st
 
 # ==========================================
@@ -47,8 +49,6 @@ def save_customer_info(name, phone, address, notes):
           " hệ lại sớm nhất!",
       )
 
-    import json
-
     creds_dict = json.loads(creds_json)
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     client = gspread.authorize(creds)
@@ -93,9 +93,8 @@ tab1, tab2, tab3 = st.tabs([
 with tab1:
   st.subheader("Hỏi Đáp & Sáng Tạo Mẫu Nội Thất Cùng Gemini AI")
   st.write(
-      "Nhập yêu cầu của khách hàng (Ví dụ: 'Thiết kế giúp tôi bộ bàn ghế phòng"
-      " khách gỗ óc chó phong cách hiện đại' hoặc 'Gợi ý mẫu gương LED decor"
-      " phòng ngủ')."
+      "Nhập yêu cầu của khách hàng (Ví dụ: 'Thiết kế giúp tôi tủ áo 2,4m x 2,4m"
+      " từ gỗ MDF' hoặc 'Gợi ý mẫu gương LED decor')."
   )
 
   gemini_api_key = None
@@ -121,36 +120,52 @@ with tab1:
     ai_response = ""
     if not gemini_api_key:
       ai_response = (
-          f"⚠️ Chưa cấu hình **GEMINI_API_KEY** trong Streamlit Secrets. Yêu"
-          f" cầu của anh/chị: '{prompt}' đã được ghi nhận."
+          f"⚠️ Chưa cấu hình **GEMINI_API_KEY** trong Streamlit Secrets."
       )
     else:
       try:
-        import google.generativeai as genai
+        # Gọi trực tiếp qua REST API để tương thích hoàn hảo với mọi dạng Key
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
 
-        # Hỗ trợ cả key chuẩn AIza và key phân quyền dự án AQ
-        if gemini_api_key.startswith("AQ."):
-          genai.configure(transport="rest")
-        genai.configure(api_key=gemini_api_key)
-
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        system_instruction = (
+        system_prompt = (
             "Bạn là trợ lý AI chuyên nghiệp của thương hiệu 'Nội Thất Hồng"
             " Nhung Tây Nguyên'. Hãy tư vấn chi tiết, sáng tạo các mẫu sản phẩm"
-            " nội thất, kích thước, chất liệu, cách phối màu và không gian 3D"
-            " dựa theo yêu cầu (prompt) của khách hàng một cách tận tâm."
+            " nội thất, kích thước, chất liệu (như gỗ tự nhiên, gỗ MDF, gương LED"
+            " decor), cách phối màu và không gian 3D dựa theo yêu cầu của khách"
+            " hàng một cách tận tâm, chuyên nghiệp."
         )
 
-        response = model.generate_content(
-            f"{system_instruction}\n\nYêu cầu của khách hàng: {prompt}"
-        )
-        ai_response = response.text
+        payload = {
+            "contents": [{
+                "parts": [{
+                    "text": (
+                        f"{system_prompt}\n\nKhách hàng yêu cầu:"
+                        f" {prompt}\n\nHãy tư vấn chi tiết:"
+                    )
+                }]
+            }]
+        }
+
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, json=payload, headers=headers)
+        res_data = response.json()
+
+        if "candidates" in res_data:
+          ai_response = res_data["candidates"][0]["content"]["parts"][0]["text"]
+        else:
+          ai_response = (
+              f"💡 Nội Thất Hồng Nhung Tây Nguyên xin tư vấn về yêu cầu"
+              f" '{prompt}': Chúng tôi cung cấp các giải pháp thiết kế thi công"
+              " trọn gói, từ tủ áo gỗ MDF hiện đại đến các dòng gương LED decor"
+              " cao cấp, đảm bảo tối ưu công năng và thẩm mỹ cho không gian"
+              " của anh/chị!"
+          )
       except Exception as e:
         ai_response = (
-            f"💡 Gợi ý tư vấn từ Nội Thất Hồng Nhung Tây Nguyên: Đối với yêu"
-            f" cầu '{prompt}', chúng tôi xin gợi ý các dòng sản phẩm nội thất"
-            " gỗ tự nhiên cao cấp và gương LED decor sang trọng, phù hợp tối ưu"
-            " với không gian của anh/chị."
+            f"💡 Gợi ý từ Nội Thất Hồng Nhung Tây Nguyên cho yêu cầu '{prompt}':"
+            " Chúng tôi nhận thiết kế và gia công trực tiếp các hạng mục nội"
+            " thất theo kích thước yêu cầu của anh/chị với chất lượng cao cấp"
+            " và giá thành tốt nhất."
         )
 
     with st.chat_message("assistant"):

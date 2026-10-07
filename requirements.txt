@@ -1,0 +1,4 @@
+gradio
+gspread
+google-auth
+requests
